@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake - Nokia Mini Map & Dynamic Speed</title>
+    <style>
+        body {
+            font-family: monospace;
+            background-color: #2a2a2a;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        #game-viewport {
+            border: 6px solid #1a1a1a;
+            border-radius: 4px;
+            background-color: #79a117;
+            padding: 10px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        /* ĐÃ CHỈNH: Chiều rộng bảng điểm tự động khớp kích thước map mới (300px) */
+        #score-board {
+            font-size: 20px;
+            color: #1a1a1a;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            width: 300px;
+            margin-bottom: 5px;
+        }
+
+        /* ĐÃ CHỈNH: Kích thước map nhỏ xuống */
+        canvas {
+            display: block;
+            background-color: #79a117;
+            border: 2px solid #1a1a1a;
+        }
+
+        .instructions {
+            margin-top: 15px;
+            color: #aaa;
+            font-size: 14px;
+            text-align: center;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-viewport">
+        <div id="score-board">
+            <span>Rắn</span>
+            <span id="score">0</span>
+        </div>
+        <canvas id="game-canvas" width="300" height="200"></canvas>
+    </div>
+
+    <div class="instructions">
+        Điều khiển: <b>W, A, S, D</b> hoặc <b>Phím mũi tên</b><br>
+        <i>Tốc độ sẽ tăng 1% sau mỗi lần ăn Orb!</i>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+
+        const gridSize = 10;
+        const gridWidth = canvas.width / gridSize;   // 30 ô ngang
+        const gridHeight = canvas.height / gridSize; // 20 ô dọc
+
+        let snake = [];
+        let food = { x: 0, y: 0 };
+        let direction = 'DOWN';
+        let nextDirection = 'DOWN';
+        let score = 0;
+        let gameInterval = null;
+        let isGameOver = false;
+        let isStarted = false;
+
+        const BaseSpeed = 150; // Tốc độ gốc ban đầu (ms)
+        const bgColor = '#79a117';
+        const penColor = '#1a1a1a'; 
+
+        function drawPixel(x, y) {
+            ctx.fillStyle = penColor;
+            ctx.fillRect(x * gridSize, y * gridSize, gridSize - 1, gridSize - 1);
+        }
+
+        // Khởi tạo rắn 3 ô vừa vặn với map nhỏ
+        function createSnake() {
+            snake = [
+                {x: 22, y: 6}, 
+                {x: 22, y: 5}, 
+                {x: 22, y: 4}  
+            ];
+            direction = 'DOWN';
+            nextDirection = 'DOWN';
+        }
+
+        function createFood() {
+            food = { x: 22, y: 11 };
+        }
+
+        function generateNewFood() {
+            let valid = false;
+            while (!valid) {
+                food = {
+                    x: Math.floor(Math.random() * (gridWidth - 2)) + 1,
+                    y: Math.floor(Math.random() * (gridHeight - 2)) + 1
+                };
+                valid = true;
+                for (let part of snake) {
+                    if (part.x === food.x && part.y === food.y) {
+                        valid = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ĐÃ SỬA: Hàm tính toán và cập nhật lại bộ đếm thời gian với tốc độ tăng dần
+        function startTimer() {
+            if (gameInterval) clearInterval(gameInterval);
+            
+            // Công thức: Mỗi điểm làm giảm thời gian chờ đi 1% (tức là chạy nhanh hơn)
+            let currentSpeed = BaseSpeed * Math.pow(0.99, score);
+            
+            // Chặn giới hạn tốc độ tối đa để game không bị nhanh quá mức phần cứng xử lý (tối đa 35ms)
+            if (currentSpeed < 35) currentSpeed = 35; 
+
+            gameInterval = setInterval(update, currentSpeed);
+        }
+
+        function render() {
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            drawPixel(food.x, food.y);
+
+            for (let part of snake) {
+                drawPixel(part.x, part.y);
+            }
+
+            if (isGameOver) {
+                ctx.fillStyle = penColor;
+                ctx.font = "bold 18px monospace";
+                ctx.textAlign = "center";
+                ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 10);
+                ctx.font = "12px monospace";
+                ctx.fillText("BẤM PHÍM BẤT KỲ ĐỂ CHƠI LẠI", canvas.width / 2, canvas.height / 2 + 15);
+            } else if (!isStarted) {
+                ctx.fillStyle = penColor;
+                ctx.font = "bold 14px monospace";
+                ctx.textAlign = "center";
+                ctx.fillText("ẤN PHÍM BẤT KỲ ĐỂ CHƠI", canvas.width / 2, canvas.height / 2);
+            }
+        }
+
+        function update() {
+            if (isGameOver || !isStarted) return;
+
+            direction = nextDirection;
+            const head = { x: snake[0].x, y: snake[0].y };
+
+            switch (direction) {
+                case 'UP': head.y--; break;
+                case 'DOWN': head.y++; break;
+                case 'LEFT': head.x--; break;
+                case 'RIGHT': head.x++; break;
+            }
+
+            if (head.x < 0 || head.x >= gridWidth || head.y < 0 || head.y >= gridHeight) {
+                endGame();
+                return;
+            }
+
+            for (let part of snake) {
+                if (head.x === part.x && head.y === part.y) {
+                    endGame();
+                    return;
+                }
+            }
+
+            snake.unshift(head);
+
+            // ĐÃ CHỈNH: Cộng mỗi lần 1 điểm + Tự động tăng tốc độ
+            if (head.x === food.x && head.y === food.y) {
+                score += 1; 
+                scoreElement.innerText = score;
+                generateNewFood();
+                startTimer(); // Gọi lại hàm để áp dụng tốc độ mới nhanh hơn 1%
+            } else {
+                snake.pop();
+            }
+
+            render();
+        }
+
+        function endGame() {
+            isGameOver = true;
+            clearInterval(gameInterval);
+            render();
+        }
+
+        function resetGame() {
+            score = 0;
+            scoreElement.innerText = score;
+            isGameOver = false;
+            isStarted = false;
+            createSnake();
+            createFood();
+            render();
+        }
+
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            
+            if (isGameOver) {
+                resetGame();
+                return;
+            }
+
+            if (!isStarted) {
+                isStarted = true;
+                startTimer(); 
+                return;
+            }
+
+            if ((key === 'w' || e.key === 'ArrowUp') && direction !== 'DOWN') nextDirection = 'UP';
+            if ((key === 's' || e.key === 'ArrowDown') && direction !== 'UP') nextDirection = 'DOWN';
+            if ((key === 'a' || e.key === 'ArrowLeft') && direction !== 'RIGHT') nextDirection = 'LEFT';
+            if ((key === 'd' || e.key === 'ArrowRight') && direction !== 'LEFT') nextDirection = 'RIGHT';
+        });
+
+        resetGame();
+    </script>
+</body>
+</html>
